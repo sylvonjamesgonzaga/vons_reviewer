@@ -1,0 +1,21 @@
+import d12 from '@/data/domains-1-2.json';
+import d35 from '@/data/domains-3-5.json';
+import ref from '@/data/reference.json';
+import mini from '@/data/mini-quiz.json';
+import mock from '@/data/mock-exam.json';
+
+export type ContentTable={ title:string; columns:string[]; rows:string[][] };
+export type Task={id:string;title:string;oneLine:string;keywords:string[];concept:string[];steps:string[];examTip:string;table?:ContentTable;table2?:ContentTable;code?:string;diagram?:string};
+export type Objective={id:string;text:string;keyPoints:string[];code?:string};
+export type Domain={id:number;slug:string;title:string;weight:number;approxQuestions:number;summary:string;taskStatements:Task[];testObjectives:Objective[];traps:{wrong:string;right:string;why:string}[]};
+export type Question={id:string;domain:number;scenario?:number;task?:string;type:'single'|'multi';pick?:number;q:string;options:Record<string,string>;answer:string[];why:string};
+export const domains=[...d12.domains,...d35.domains] as Domain[];
+export const reference=ref;
+export const miniQuiz=mini.questions as Question[];
+export const mockExam=mock.questions as Question[];
+export const mockInfo={title:mock.title,credit:mock.credit,timeLimitMinutes:mock.timeLimitMinutes,passTargetPercent:mock.passTargetPercent};
+export const tasks=domains.flatMap(domain=>domain.taskStatements.map(task=>({...task,domain:domain.id,domainName:domain.title})));
+export const objectives=domains.flatMap(domain=>domain.testObjectives.map(objective=>({...objective,domain:domain.id})));
+export const getTask=(id:string)=>tasks.find(task=>task.id===id);
+export const getDomain=(id:number)=>domains.find(domain=>domain.id===id);
+export const getHref=(refId:string)=>refId.startsWith('TO-')?`/objectives?focus=${encodeURIComponent(refId)}`:`/study?lesson=${encodeURIComponent(refId)}`;

@@ -1,0 +1,492 @@
+{
+  "domains": [
+    {
+      "id": 3,
+      "slug": "claude-code-configuration-workflows",
+      "title": "Claude Code Configuration & Workflows",
+      "weight": 20,
+      "approxQuestions": 12,
+      "summary": "How you configure Claude Code for a team: memory files (CLAUDE.md), commands and skills, path-specific rules, hooks, plan mode, iterative refinement, and CI/CD use.",
+      "taskStatements": [
+        {
+          "id": "3.1",
+          "title": "CLAUDE.md Hierarchy, Scoping, and Modular Organization",
+          "oneLine": "User / project / directory levels. @import. /memory.",
+          "keywords": ["CLAUDE.md", "user-level", "project-level", "directory-level", "@import", ".claude/rules/", "/memory", "version control"],
+          "concept": [
+            "CLAUDE.md files hold persistent instructions that Claude Code loads automatically at session start.",
+            "Modular organization: use @import (@docs/testing-standards.md) to keep the main file short; put topic files in .claude/rules/ (testing.md, api-conventions.md); use /memory to see which memory files are loaded."
+          ],
+          "table": {
+            "title": "CLAUDE.md levels",
+            "columns": ["Level", "Location", "Who gets it", "Shared via git?"],
+            "rows": [
+              ["User", "~/.claude/CLAUDE.md", "Only you, all projects", "No"],
+              ["Project", "CLAUDE.md or .claude/CLAUDE.md in repo root", "Everyone on the project", "Yes"],
+              ["Directory", "<subfolder>/CLAUDE.md", "Everyone, when working in that folder", "Yes"]
+            ]
+          },
+          "steps": [
+            "Diagnose 'a teammate does not get the instructions': run /memory on the teammate's machine and list loaded files.",
+            "Check where the instruction lives. In ~/.claude/CLAUDE.md = only the author gets it.",
+            "Move it to the project-level CLAUDE.md (or an imported file).",
+            "Commit to version control."
+          ],
+          "examTip": "'Works for me but not for new team members' -> instruction is at USER level. Move it to PROJECT level."
+        },
+        {
+          "id": "3.2",
+          "title": "Custom Slash Commands and Skills",
+          "oneLine": ".claude/commands/, .claude/skills/, context: fork, allowed-tools.",
+          "keywords": ["slash command", ".claude/commands/", "~/.claude/commands/", "skill", "SKILL.md", "frontmatter", "context: fork", "allowed-tools", "argument-hint"],
+          "concept": [
+            "A skill loads ON DEMAND (when invoked or relevant). CLAUDE.md is ALWAYS loaded. Universal standards -> CLAUDE.md. Task-specific workflows -> skills."
+          ],
+          "table": {
+            "title": "Where things live",
+            "columns": ["Item", "Location", "Scope"],
+            "rows": [
+              ["Project command", ".claude/commands/<name>.md", "Shared with team via git"],
+              ["User command", "~/.claude/commands/<name>.md", "Personal, all your projects"],
+              ["Project skill", ".claude/skills/<name>/SKILL.md", "Shared with team"],
+              ["User skill", "~/.claude/skills/<name>/SKILL.md", "Personal (use a different name for a personal variant of a team skill)"]
+            ]
+          },
+          "table2": {
+            "title": "SKILL.md frontmatter",
+            "columns": ["Field", "Effect", "Use when"],
+            "rows": [
+              ["context: fork", "Runs the skill in an isolated sub-agent context; only the result returns", "Skill produces verbose output that would pollute main conversation"],
+              ["allowed-tools", "Restricts the tools the skill may use", "Prevent destructive actions (allow only Read, Grep, Glob; omit Bash)"],
+              ["argument-hint", "Shows the user which parameters to provide", "Skill needs input (file path, ticket ID)"]
+            ]
+          },
+          "steps": [
+            "Create .claude/skills/review/SKILL.md.",
+            "Add frontmatter: name, description, context: fork, allowed-tools: Read, Grep, Glob, argument-hint.",
+            "Write the instructions (criteria, output format).",
+            "Commit the folder. The team invokes it with /review."
+          ],
+          "examTip": "'Skill output fills main context' -> context: fork. 'Skill must not modify files' -> allowed-tools. 'Command for whole team' -> project .claude/ folder, not ~/.claude/."
+        },
+        {
+          "id": "3.3",
+          "title": "Path-Specific Rules for Conditional Convention Loading",
+          "oneLine": ".claude/rules/*.md with paths: glob frontmatter.",
+          "keywords": ["path-specific rules", ".claude/rules/", "YAML frontmatter", "paths:", "glob pattern", "conditional loading", "token efficiency"],
+          "concept": [
+            "A rule file in .claude/rules/ can have YAML frontmatter with a paths: field. The rule loads ONLY when Claude works on matching files, saving context.",
+            "Files of one type spread across many folders (tests next to source) -> path-specific rule with a glob. All files in one folder (terraform/) -> directory CLAUDE.md also works."
+          ],
+          "code": "---\npaths: [\"**/*.test.tsx\", \"**/*.test.ts\"]\n---\n(test conventions here)",
+          "steps": [
+            "Create .claude/rules/testing.md.",
+            "Add frontmatter paths: [\"**/*.test.tsx\"].",
+            "Write the conventions (fixtures, naming, mocks).",
+            "Commit. The rule loads only when a test file is edited."
+          ],
+          "examTip": "'Conventions for files scattered across the codebase' -> .claude/rules/ + paths: glob. NOT a CLAUDE.md in every folder."
+        },
+        {
+          "id": "3.4",
+          "title": "Plan Mode vs Direct Execution",
+          "oneLine": "Plan for big / multi-file / many options. Direct for small and clear.",
+          "keywords": ["plan mode", "direct execution", "multi-file change", "architectural decision", "Explore subagent", "investigate then implement"],
+          "concept": [
+            "Plan mode: large or multi-file changes (library migration across 45+ files), several valid approaches, architectural decisions, need to explore first.",
+            "Direct execution: small well-scoped change, one clear approach, single-file bug fix with a clear stack trace, one validation conditional.",
+            "The Explore subagent runs verbose discovery in its own context and returns a summary."
+          ],
+          "steps": [
+            "Large migration: enter plan mode (Claude reads but does not change code).",
+            "Use the Explore subagent for wide discovery; get a summary.",
+            "Review and approve the plan.",
+            "Switch to direct execution to implement."
+          ],
+          "examTip": "Plan mode is NOT for every task. A one-line bug fix in plan mode wastes time. Best answer often COMBINES plan mode (investigate) + direct execution (implement)."
+        },
+        {
+          "id": "3.5",
+          "title": "Iterative Refinement Techniques",
+          "oneLine": "Concrete examples, tests first, interview pattern.",
+          "keywords": ["concrete input/output examples", "test-driven iteration", "interview pattern", "batch related issues", "sequential independent issues"],
+          "concept": [],
+          "table": {
+            "title": "Techniques",
+            "columns": ["Technique", "Problem it solves", "How"],
+            "rows": [
+              ["Concrete input/output examples", "Prose gives inconsistent results", "Give 2-3 examples of input and expected output"],
+              ["Test-driven iteration", "Need verifiable correctness", "Write tests first, run them, share failures, repeat"],
+              ["Interview pattern", "Unfamiliar domain; hidden requirements", "Ask Claude to ask YOU questions first (cache invalidation, failure modes, edge cases)"],
+              ["One message for interacting issues", "Fixes depend on each other", "Describe all related issues together"],
+              ["Sequential for independent issues", "Fixes do not interact", "Fix one, verify, then the next"]
+            ]
+          },
+          "steps": [],
+          "examTip": "'Output format keeps varying despite detailed description' -> concrete examples. 'Developer new to the domain' -> interview pattern."
+        },
+        {
+          "id": "3.6",
+          "title": "CI/CD Integration",
+          "oneLine": "-p, --output-format json, --json-schema, independent reviewer.",
+          "keywords": ["-p / --print", "non-interactive mode", "--output-format json", "--json-schema", "inline PR comments", "session context isolation", "independent review instance", "prior findings", "duplicate comments"],
+          "concept": [
+            "claude -p '<prompt>' runs non-interactively. Without -p the CI job hangs waiting for input.",
+            "--output-format json with --json-schema gives machine-parseable output your script turns into inline PR comments.",
+            "CLAUDE.md gives CI context: testing standards, fixture conventions, review criteria.",
+            "Session context isolation: the session that wrote the code is bad at reviewing it. Use an INDEPENDENT instance.",
+            "On re-runs after new commits: include prior review findings; report only NEW or STILL-UNADDRESSED issues.",
+            "For test generation: give existing test files so Claude does not suggest duplicates."
+          ],
+          "steps": [
+            "Trigger the job on PR open or new commit.",
+            "Run claude -p \"Review this diff\" --output-format json --json-schema review.json.",
+            "Provide context: CLAUDE.md review criteria, prior findings, existing tests.",
+            "Use a fresh, independent instance (not the generating session).",
+            "Parse the JSON; post inline comments for new or open issues only."
+          ],
+          "examTip": "'CI job hangs' -> missing -p. 'Cannot parse output' -> --output-format json + --json-schema. 'Same comments repeated each commit' -> pass prior findings. 'Self-review misses bugs' -> independent instance."
+        }
+      ],
+      "testObjectives": [
+        {"id": "TO-3.1", "text": "Implement PostToolUse hooks that automatically enforce code quality constraints - such as formatting, linting, or test execution - after every file edit, independent of model instruction-following.", "keyPoints": ["'Always run Prettier' in CLAUDE.md is only a request; a hook is automatic", "PostToolUse hook, matcher 'Edit|Write', type 'command', in project .claude/settings.json", "Hook gets JSON on stdin including tool_input.file_path", "On failure script exits with code 2 and writes to stderr; Claude Code feeds the message to Claude", "Key phrase: 'independent of model instruction-following' or 'after every edit' -> hook", "Events: PreToolUse (block dangerous commands), PostToolUse (format/lint/test), UserPromptSubmit, Stop (final checks), SessionStart"], "code": "{\n  \"hooks\": {\n    \"PostToolUse\": [{\n      \"matcher\": \"Edit|Write\",\n      \"hooks\": [{ \"type\": \"command\", \"command\": \"./scripts/format-and-lint.sh\" }]\n    }]\n  }\n}"},
+        {"id": "TO-3.2", "text": "Distinguish instructions that must be enforced through settings permissions or hooks from those appropriately placed in CLAUDE.md, and restructure configurations accordingly.", "keyPoints": ["Never read .env -> permissions.deny: [\"Read(./.env)\"]", "Never run rm -rf -> permissions.deny or PreToolUse hook", "Format after every edit -> PostToolUse hook", "2-space indentation, prefer functional components -> CLAUDE.md", "Run npm test without asking -> permissions.allow: [\"Bash(npm run test *)\"]", "Rule: must happen / must never happen -> permissions or hooks; preference/convention -> CLAUDE.md"]},
+        {"id": "TO-3.3", "text": "Select the correct Claude Code configuration mechanism - CLAUDE.md, .claude/rules/ with glob patterns, Skills, hooks, or settings permissions - based on guidance type and when it should apply.", "keyPoints": ["CLAUDE.md: guidance, always", "rules + paths glob: guidance, only when matching files touched", "Skill: workflow, on demand", "Hook: deterministic automation on lifecycle events", "Settings permissions: enforcement on every tool call (allow/ask/deny)"]},
+        {"id": "TO-3.4", "text": "Select the appropriate method for providing project context to Claude Code - @ references, CLAUDE.md, or inline description - based on reusability, specificity, and cross-session need.", "keyPoints": ["@ reference: one specific file for this task", "CLAUDE.md (or @import): reused across sessions and people", "Inline description: short one-off detail"]},
+        {"id": "TO-3.5", "text": "Create and deploy custom slash commands in the correct project or user directory so they are available to intended users and invoked on demand for task-specific workflows.", "keyPoints": ["Team command -> .claude/commands/<name>.md (commit it)", "Personal command -> ~/.claude/commands/<name>.md", "Invoke with /<name>; skills in .claude/skills/ work the same and add frontmatter options"]},
+        {"id": "TO-3.6", "text": "Structure iterative refinement workflows by providing concrete input-output examples, targeted feedback on specific failures, and batched issue descriptions for consolidated evaluation.", "keyPoints": ["2-3 input -> expected output pairs", "Targeted feedback: which case, what expected, what came back", "Batch interacting issues in one message; fix independent ones one at a time", "Wrong: 'It's still wrong, try again'. Right: 'Case 3: input 12/05 should give 2026-05-12, got 2026-12-05.'"]},
+        {"id": "TO-3.7", "text": "Determine when to use plan mode versus direct execution based on task scope, reversibility, architectural uncertainty, and the need for stakeholder review before implementation.", "keyPoints": ["Scope: many files -> plan; one file -> direct", "Reversibility: hard to undo (schema, migration, API contract) -> plan", "Architectural uncertainty: several valid designs -> plan", "Stakeholder review needed first -> plan"]}
+      ],
+      "traps": [
+        {"wrong": "Put team rules in ~/.claude/CLAUDE.md", "right": "Project-level CLAUDE.md in git", "why": "User level is personal"},
+        {"wrong": "Put a CLAUDE.md in every folder that has test files", "right": ".claude/rules/ with paths: [\"**/*.test.tsx\"]", "why": "Glob handles scattered files"},
+        {"wrong": "Put a long workflow in CLAUDE.md", "right": "Make it a skill (on demand)", "why": "CLAUDE.md is always loaded; wastes context"},
+        {"wrong": "Run the verbose analysis skill in the main context", "right": "context: fork", "why": "Keeps the main context clean"},
+        {"wrong": "Use plan mode for a one-line fix", "right": "Direct execution", "why": "Plan mode adds no value for clear, small tasks"},
+        {"wrong": "Run claude \"review\" in CI", "right": "claude -p \"review\"", "why": "Without -p the job waits for input"},
+        {"wrong": "Ask the same session to review its own code", "right": "Independent review instance", "why": "Self-review keeps its own bias"},
+        {"wrong": "Re-review from scratch on each commit", "right": "Include prior findings; report only new/open", "why": "Prevents duplicate comments"},
+        {"wrong": "Describe the format in more prose", "right": "Give 2-3 concrete input/output examples", "why": "Examples remove ambiguity"},
+        {"wrong": "Write 'always run Prettier' in CLAUDE.md", "right": "PostToolUse hook in .claude/settings.json", "why": "CLAUDE.md is guidance; hooks are deterministic"}
+      ]
+    },
+    {
+      "id": 4,
+      "slug": "prompt-engineering-structured-output",
+      "title": "Prompt Engineering & Structured Output",
+      "weight": 20,
+      "approxQuestions": 12,
+      "summary": "How you write precise prompts, use few-shot examples, force structured output with tools and JSON schemas, build validation-retry loops, use the Message Batches API, and design multi-pass review.",
+      "taskStatements": [
+        {
+          "id": "4.1",
+          "title": "System Prompts with Explicit Criteria",
+          "oneLine": "Say exactly what to report and what to skip.",
+          "keywords": ["explicit criteria", "false positives", "precision", "severity criteria", "categorical rules", "disable high-FP category"],
+          "concept": [
+            "Vague instructions like 'be conservative' or 'only report high-confidence findings' do NOT improve precision. Claude needs explicit criteria: which issue types to report and which to skip.",
+            "One category with many false positives makes users distrust ALL findings."
+          ],
+          "steps": [
+            "List what to report: bugs, security issues, data loss risks.",
+            "List what to skip: minor style, locally accepted patterns.",
+            "Define severity levels with a concrete code example for each level.",
+            "Measure false positives per category.",
+            "Temporarily disable high-FP categories, improve their prompts, turn them back on."
+          ],
+          "examTip": "'Too many false positives' -> explicit categorical criteria + examples. Not 'be more careful', not 'raise the confidence threshold'."
+        },
+        {
+          "id": "4.2",
+          "title": "Few-Shot Prompting",
+          "oneLine": "2-4 targeted examples for ambiguous cases.",
+          "keywords": ["few-shot examples", "ambiguous cases", "reasoning in examples", "generalization", "consistent format", "hallucination reduction"],
+          "concept": [
+            "Few-shot examples are the most effective way to get consistent output format and consistent judgment on ambiguous cases.",
+            "Use 2-4 targeted examples focused on AMBIGUOUS cases, not easy ones. Show the reasoning (why this action over a plausible alternative). Good examples let Claude generalize.",
+            "Extraction: examples cover varied structures (informal measurements, inline citations vs bibliographies). Code review: acceptable patterns vs real issues."
+          ],
+          "steps": [
+            "Collect real cases where Claude was wrong or inconsistent.",
+            "Pick 2-4 that represent the ambiguity.",
+            "For each: input -> correct output -> short reasoning ('Chose X, not Y, because...').",
+            "Use the exact output format you want.",
+            "Test on new cases to confirm generalization."
+          ],
+          "examTip": "'Inconsistent format or judgment on edge cases' -> few-shot with reasoning. 'Rule must be followed 100%' -> NOT few-shot; use code enforcement (Domain 1)."
+        },
+        {
+          "id": "4.3",
+          "title": "Structured Output with Tool Use and JSON Schemas",
+          "oneLine": "tool_use + JSON schema. Nullable fields. Enum + 'other'.",
+          "keywords": ["tool_use", "JSON schema", "input_schema", "syntax errors vs semantic errors", "required vs optional", "nullable field", "enum + 'other'", "'unclear' value", "format normalization"],
+          "concept": [
+            "Most reliable way to get schema-compliant JSON: define a tool whose input_schema is your JSON schema, then have Claude call it. This eliminates JSON SYNTAX errors.",
+            "A strict schema does NOT eliminate SEMANTIC errors (line items not matching total, value in wrong field). Validate those in code (see 4.4)."
+          ],
+          "table": {
+            "title": "Schema design rules",
+            "columns": ["Rule", "Why", "Example"],
+            "rows": [
+              ["Make a field nullable/optional when the source may not contain it", "Prevents fabrication to fill a required field", "\"due_date\": {\"type\":[\"string\",\"null\"]}"],
+              ["Use enum + 'other' + a detail string", "Captures values you did not predict", "category: [invoice, receipt, other] + category_detail"],
+              ["Add an 'unclear' enum value", "Claude can say it is not sure instead of guessing", "sentiment: [pos, neg, neutral, unclear]"],
+              ["Put format normalization rules in the prompt", "Consistent dates, units, currencies", "'Dates as YYYY-MM-DD.'"]
+            ]
+          },
+          "steps": [
+            "Define the tool: name, description, input_schema.",
+            "Mark fields that may be missing as nullable.",
+            "Add enums with 'other' and 'unclear' where needed.",
+            "Set tool_choice to force the tool (or 'any' for several schemas).",
+            "Read the tool_use block's input. Validate semantics in code."
+          ],
+          "examTip": "'Claude invents values for missing fields' -> nullable/optional. 'JSON sometimes invalid' -> tool_use with a schema, not 'please return JSON'."
+        },
+        {
+          "id": "4.4",
+          "title": "Validation, Retry, and Feedback Loops",
+          "oneLine": "Retry with the specific errors. Do not retry absent data.",
+          "keywords": ["validation-retry loop", "retry with error feedback", "absent information", "calculated_total vs stated_total", "conflict_detected", "detected_pattern", "self-correction"],
+          "concept": [
+            "After extraction, validate in code. If validation fails, retry and append the SPECIFIC validation errors. Claude then corrects the exact problem.",
+            "Retries work for format/structure errors. Retries do NOT work when the information is absent from the source - return null or flag for review.",
+            "Self-correction fields: extract stated_total AND calculated_total (mismatch flags error); add conflict_detected boolean for inconsistent sources; add detected_pattern in review findings to analyze why developers dismiss findings."
+          ],
+          "steps": [
+            "Run extraction.",
+            "Validate: types, required fields, sums, date formats.",
+            "If errors: send the SAME document + previous output + the specific errors ('line_items sum 450 != total 500').",
+            "Limit retries (e.g. 2).",
+            "If data does not exist in source: stop retrying; set null or route to human review."
+          ],
+          "examTip": "'Retry just resends the same prompt' -> wrong; include specific errors. 'Field keeps failing because it is not in the document' -> do NOT retry; make it nullable."
+        },
+        {
+          "id": "4.5",
+          "title": "Batch Processing Strategies",
+          "oneLine": "Batches API: 50% cheaper, up to 24 h, custom_id, no multi-turn tools.",
+          "keywords": ["Message Batches API", "50% cost saving", "24-hour processing window", "no latency SLA", "custom_id", "no multi-turn tool calling", "resubmit failed items", "prompt refinement on sample"],
+          "concept": [
+            "SLA calculation: a document can wait for the next submission window, then up to 24 h for the batch. So: window + 24 h <= SLA. Example: SLA 30 h -> window <= 6 h. The guide's example uses 4-hour windows for a safe margin."
+          ],
+          "table": {
+            "title": "Message Batches API",
+            "columns": ["Property", "Message Batches API"],
+            "rows": [
+              ["Cost", "50% lower than standard calls"],
+              ["Time", "Up to 24 hours. No guaranteed latency SLA"],
+              ["Correlation", "Each request has a custom_id; use it to match results to inputs"],
+              ["Limitation", "No multi-turn tool calling inside one request"],
+              ["Good for", "Non-blocking, latency-tolerant: overnight reports, weekly audits, nightly test generation, large backlogs"],
+              ["Not good for", "Blocking work: pre-merge checks, live chat, anything a person waits for"]
+            ]
+          },
+          "steps": [
+            "Refine the prompt on a small sample first (e.g. 50 docs) with synchronous calls.",
+            "Build the batch; give each request a unique custom_id (e.g. document ID).",
+            "Submit and poll until the batch ends.",
+            "Match results by custom_id.",
+            "Resubmit ONLY the failed items by custom_id with a fix (e.g. chunk documents that exceeded the context limit)."
+          ],
+          "examTip": "'Pre-merge check must finish in minutes' -> synchronous API. 'Nightly job, cut cost' -> Batches. 'Need tool calls in the middle' -> NOT Batches."
+        },
+        {
+          "id": "4.6",
+          "title": "Multi-Instance and Multi-Pass Review",
+          "oneLine": "Independent reviewer. Per-file + integration passes.",
+          "keywords": ["self-review limitation", "independent instance", "multi-pass review", "per-file pass", "cross-file integration pass", "verification pass", "confidence routing"],
+          "concept": [
+            "A model that generated content keeps its reasoning context and is less likely to question its own decisions. Self-review is weak.",
+            "An independent instance (new call without the generator's reasoning) beats self-review instructions or extended thinking."
+          ],
+          "steps": [
+            "Pass 1: per-file local analysis (one call per file).",
+            "Pass 2: cross-file integration analysis (interfaces, data flow).",
+            "Pass 3: independent verification pass; each finding gets a confidence score.",
+            "Route by confidence: high -> post; low -> human review or drop."
+          ],
+          "examTip": "'Generator reviews its own output and misses errors' -> independent reviewer instance. Not 'ask it to review more carefully'."
+        }
+      ],
+      "testObjectives": [
+        {"id": "TO-4.1", "text": "Design extraction schemas with optional fields, nullable values, and appropriate enum definitions that allow the model to accurately represent missing or ambiguous information without fabricating values.", "keyPoints": ["Required value + absent data = fabrication", "Field may not exist -> nullable / not in required -> null", "Fixed set -> enum; unexpected values -> 'other' + detail; ambiguous -> 'unclear'; exists-but-unstated -> 'not_stated'", "Tell Claude in the field description to use null when absent", "Distractors: 'do not hallucinate' prompt, make all fields required, retry until filled, remove the field"], "code": "\"due_date\": {\"type\": [\"string\",\"null\"], \"description\": \"YYYY-MM-DD. null if not in document.\"}\n\"doc_type\": {\"type\":\"string\",\"enum\":[\"invoice\",\"receipt\",\"credit_note\",\"other\"]}\n\"doc_type_detail\": {\"type\":[\"string\",\"null\"]}\n\"required\": [\"doc_type\",\"total\"]"},
+        {"id": "TO-4.2", "text": "Apply extraction accuracy patterns - structured schemas with optional fields, format normalization instructions, and few-shot examples - to reduce hallucination and improve consistency across varied document formats.", "keyPoints": ["Schema controls structure and blocks fabrication", "Normalization rules: dates YYYY-MM-DD, amounts as numbers without symbols, units in kg", "2-4 examples from DIFFERENT document formats, including one where a field is missing (output null)"]},
+        {"id": "TO-4.3", "text": "Select and implement the most reliable structured output method - tool use with JSON schema, prompt-based formatting, or prefilled responses - based on required schema compliance strictness.", "keyPoints": ["Prompt-based formatting: lowest reliability", "Prefilled response (start turn with '{'): medium; format start fixed, schema not enforced", "Tool use + JSON schema + forced tool_choice: highest", "'Downstream parser breaks', 'must match schema' -> tool use + JSON schema"]},
+        {"id": "TO-4.4", "text": "Implement tool use with defined JSON schemas to enforce structured output compliance, and configure tool_choice to guarantee tool invocation when conversational responses would cause downstream failures.", "keyPoints": ["If Claude can reply 'Here is the data...' in text the parser fails", "Set tool_choice any or the specific tool so a tool_use block always comes back"]},
+        {"id": "TO-4.5", "text": "Design feedback loop mechanisms that capture structured metadata about model errors and use those patterns to improve prompts, schemas, or few-shot examples in future iterations.", "keyPoints": ["Record per output: field, error type, detected_pattern, reviewer decision (accepted / dismissed + reason)", "Aggregate to find most-failing / most-dismissed patterns", "Fix the source: tighten prompt criteria, change schema, add few-shot", "Re-measure on the same validation set"]},
+        {"id": "TO-4.6", "text": "Select the appropriate API processing mode - synchronous Messages API or asynchronous Message Batches API - based on latency requirements, workflow blocking behavior, and acceptable processing windows.", "keyPoints": ["Blocking or fast response -> synchronous", "Non-blocking and up to 24 h acceptable -> Batches (50% cheaper)"]}
+      ],
+      "traps": [
+        {"wrong": "'Be conservative, only high-confidence findings.'", "right": "Explicit report/skip criteria with examples", "why": "Vague words do not change precision"},
+        {"wrong": "Add 20 easy examples", "right": "2-4 targeted ambiguous examples with reasoning", "why": "Quality and coverage of ambiguity matter"},
+        {"wrong": "'Please output valid JSON' in the prompt", "right": "tool_use with JSON schema", "why": "Schema removes syntax errors"},
+        {"wrong": "Strict schema guarantees correct data", "right": "Schema fixes syntax; validate semantics in code", "why": "Totals and field placement can still be wrong"},
+        {"wrong": "Make every field required", "right": "Nullable fields for data that may be absent", "why": "Required fields cause fabrication"},
+        {"wrong": "Retry until valid", "right": "Retry with specific errors; stop if data is absent", "why": "Absent data never appears by retrying"},
+        {"wrong": "Use Batches API for pre-merge checks to save cost", "right": "Synchronous API for blocking checks", "why": "Batches can take 24 hours"},
+        {"wrong": "Resubmit the whole batch after some failures", "right": "Resubmit only failed custom_ids", "why": "Saves cost and time"},
+        {"wrong": "Ask the generator to self-review with extended thinking", "right": "Independent reviewer instance", "why": "Self-review keeps its own bias"}
+      ]
+    },
+    {
+      "id": 5,
+      "slug": "context-management-reliability",
+      "title": "Context Management & Reliability",
+      "weight": 15,
+      "approxQuestions": 9,
+      "summary": "How you keep critical facts in long conversations, when to escalate, how errors propagate in multi-agent systems, how to avoid context degradation, how to calibrate human review, and how to keep source provenance.",
+      "taskStatements": [
+        {
+          "id": "5.1",
+          "title": "Context Window Management",
+          "oneLine": "Case facts block. Trim tool output. Key facts at start.",
+          "keywords": ["progressive summarization", "case facts block", "lost in the middle", "tool output trimming", "section headers", "structured subagent output", "context budget"],
+          "concept": [
+            "Progressive summarization risk: summaries turn exact values (amounts, dates) into vague text.",
+            "Lost in the middle: models handle the beginning and end of long input well; findings in the middle can be missed.",
+            "Tool result bloat: an order lookup can return 40+ fields when only 5 matter.",
+            "The API is stateless: you send the complete conversation history with each request."
+          ],
+          "steps": [
+            "Extract transactional facts (order numbers, amounts, dates, status, promises) into a CASE FACTS block.",
+            "Include the block in every prompt, OUTSIDE the summarized history. Never summarize it.",
+            "Trim tool outputs to relevant fields before adding to history (a PostToolUse hook can do this).",
+            "When aggregating long inputs: key findings summary at the BEGINNING + explicit section headers.",
+            "Make subagents return structured data (key facts, citations, relevance scores), not verbose text."
+          ],
+          "examTip": "'After a long chat the agent forgot the exact refund amount' -> case facts block outside the summary. Not a bigger context window."
+        },
+        {
+          "id": "5.2",
+          "title": "Escalation and Ambiguity Resolution",
+          "oneLine": "Human request, policy gap, no progress. Not sentiment.",
+          "keywords": ["escalation trigger", "explicit human request", "policy gap", "policy exception", "no meaningful progress", "sentiment (unreliable)", "self-reported confidence (unreliable)", "multiple matches", "additional identifiers"],
+          "concept": [
+            "Frustrated customer but issue is simple and in scope -> acknowledge frustration and offer the fix. If they repeat the request for a human -> escalate.",
+            "Multiple customer matches (two 'John Smith') -> ask for another identifier (email, order number). Do not pick by heuristic."
+          ],
+          "table": {
+            "title": "Escalation triggers",
+            "columns": ["Valid trigger", "NOT a valid trigger by itself"],
+            "rows": [
+              ["Customer explicitly asks for a human -> escalate immediately", "Negative sentiment or frustration"],
+              ["Policy is silent or ambiguous (e.g. competitor price match)", "Claude's self-reported confidence score"],
+              ["A policy exception is needed", "The case 'looks complex'"],
+              ["Agent cannot make meaningful progress", "Long conversation length"]
+            ]
+          },
+          "steps": [
+            "Write explicit escalation criteria in the system prompt.",
+            "Add few-shot examples: escalate vs resolve, with reasoning.",
+            "For hard limits (refund > $500) also add a hook (Domain 1).",
+            "On escalation send a structured handoff (customer ID, root cause, amount, recommended action)."
+          ],
+          "examTip": "Sentiment analysis and confidence scores are DISTRACTORS for escalation. Correct triggers: human request, policy gap/exception, no progress."
+        },
+        {
+          "id": "5.3",
+          "title": "Error Propagation in Multi-Agent Systems",
+          "oneLine": "Structured error context. No silent failures.",
+          "keywords": ["structured error context", "failure type", "partial results", "alternatives", "silent suppression", "workflow termination", "local recovery", "coverage annotation"],
+          "concept": [
+            "When a subagent fails, the coordinator needs structured error context: failure type, query attempted, partial results, possible alternatives.",
+            "Anti-pattern 1 - Silent suppression: returning an empty result as success (coordinator thinks 'no data exists').",
+            "Anti-pattern 2 - Workflow termination: stopping the whole workflow because one source failed."
+          ],
+          "steps": [
+            "Subagent retries TRANSIENT errors locally.",
+            "If still failing: return a structured error (type, query, partial results, alternatives).",
+            "Coordinator decides: retry with another source, or continue with a gap.",
+            "Final report includes coverage annotations: which findings are well supported, which areas have gaps."
+          ],
+          "examTip": "Generic status like 'search unavailable' hides context. Choose the answer that passes structured detail and continues with annotated gaps."
+        },
+        {
+          "id": "5.4",
+          "title": "Codebase Exploration and Context Degradation",
+          "oneLine": "Scratchpad files, subagents, /compact, state manifest.",
+          "keywords": ["context degradation", "'typical patterns' symptom", "scratchpad file", "subagent delegation", "/compact", "state manifest", "crash recovery"],
+          "concept": [
+            "In long sessions context degradation happens. Symptom: inconsistent answers and references to 'typical patterns' instead of the specific classes found earlier."
+          ],
+          "table": {
+            "title": "Techniques",
+            "columns": ["Technique", "What it does"],
+            "rows": [
+              ["Scratchpad file", "Claude writes key findings to a file; they survive context limits and compaction"],
+              ["Subagent delegation", "Verbose exploration runs in a subagent; main agent keeps high-level coordination and summaries"],
+              ["/compact", "Compresses the conversation to free context during long exploration"],
+              ["State manifest", "Each agent exports state to a known file; after a crash the coordinator loads the manifest and resumes"]
+            ]
+          },
+          "steps": [
+            "Delegate wide searches to an Explore subagent; get a summary.",
+            "Record confirmed facts (class names, file paths, decisions) in a scratchpad file.",
+            "Use /compact when context grows large.",
+            "For long multi-agent jobs, export state to a manifest after each step.",
+            "On restart, load the manifest and continue."
+          ],
+          "examTip": "'Answers become generic after hours of exploration' -> context degradation. Fix with scratchpad + subagents + /compact. Not a bigger model."
+        },
+        {
+          "id": "5.5",
+          "title": "Human Review and Confidence Calibration",
+          "oneLine": "Stratified sampling. Accuracy per type and field.",
+          "keywords": ["aggregate accuracy (misleading)", "stratified random sampling", "field-level confidence", "calibration", "labeled validation set", "review routing", "reviewer capacity"],
+          "concept": [
+            "97% overall accuracy can HIDE poor accuracy on one document type or field. Always measure by document type AND field.",
+            "Stratified random sampling: sample from each segment, including high-confidence results, to find hidden error patterns.",
+            "Field-level confidence scores must be CALIBRATED with a labeled validation set. Raw model confidence is not reliable.",
+            "Route low-confidence, ambiguous, or contradictory extractions to humans."
+          ],
+          "steps": [
+            "Build a labeled validation set.",
+            "Measure accuracy per document type and per field.",
+            "Calibrate confidence thresholds against the labels.",
+            "Auto-accept only segments that meet the target.",
+            "Keep stratified random audits on auto-accepted results.",
+            "Send the rest to human review."
+          ],
+          "examTip": "'97% overall, so automate everything' -> wrong. Check PER SEGMENT first."
+        },
+        {
+          "id": "5.6",
+          "title": "Information Provenance and Multi-Source Synthesis",
+          "oneLine": "Claim-source mapping. Annotate conflicts. Dates.",
+          "keywords": ["provenance", "claim-source mapping", "source attribution", "conflicting statistics", "annotate conflicts", "publication date", "collection date", "well-established vs contested"],
+          "concept": [
+            "Summaries can lose attribution. Each claim keeps a claim-source mapping: source URL, document name, excerpt, publication/collection date.",
+            "Two credible sources differ -> annotate the conflict with BOTH sources; do not pick one.",
+            "Different numbers may come from different dates -> require dates so a temporal difference is not treated as a contradiction.",
+            "Render content by type: financial data as tables, news as prose, technical findings as structured lists. Separate well-established from contested findings."
+          ],
+          "steps": [
+            "Require every subagent to return claims with source metadata and dates.",
+            "Merge claims; keep mappings through every step.",
+            "Detect conflicts; check dates first.",
+            "Annotate real conflicts with both sources.",
+            "Label each finding established or contested."
+          ],
+          "examTip": "'Final report has no citations' -> sources were lost in summarization. Fix: structured claim-source mappings passed through the pipeline."
+        }
+      ],
+      "testObjectives": [
+        {"id": "TO-5.1", "text": "Apply context management strategies - subagent isolation, scratchpad files, and targeted file reading - to sustain coherent codebase exploration across sessions exceeding context limits.", "keyPoints": ["Subagent isolation: wide exploration in a subagent, keep only the summary", "Scratchpad (e.g. NOTES.md): write confirmed facts, read it at next session start", "Targeted reading: Grep first, Read only relevant files/line ranges", "Distractors: bigger context model, read all files at start, rely on --resume alone"]},
+        {"id": "TO-5.2", "text": "Explain why conversation history must be explicitly included in each API request and identify the correct mechanism for maintaining state across multiple turns in a stateless API.", "keyPoints": ["Messages API has no memory between calls", "Each request contains the full messages array (user, assistant, tool_use, tool_result)", "Your application stores and appends history", "Summarize old turns but keep a case facts block"]},
+        {"id": "TO-5.3", "text": "Apply escalation decision criteria to determine when an agent should immediately honor a human escalation request versus attempt autonomous resolution using available tools.", "keyPoints": ["Explicit human request = escalate immediately, do not try to resolve first", "Frustrated but no request and in scope = resolve, acknowledge frustration", "Policy gap = escalate"]},
+        {"id": "TO-5.4", "text": "Design human review routing strategies that direct extractions to reviewers based on confidence scores, document characteristics, and field-level ambiguity rather than random sampling.", "keyPoints": ["Route by risk: low calibrated confidence, unusual/new document types, poor scans, ambiguous or conflicting fields", "Random sampling is for AUDITING auto-accepted items, not choosing what humans review"]}
+      ],
+      "traps": [
+        {"wrong": "Increase context window size to keep facts", "right": "Case facts block outside summaries", "why": "Facts get lost in summaries, not only by size"},
+        {"wrong": "Escalate when sentiment is negative", "right": "Escalate on human request, policy gap, no progress", "why": "Sentiment is an unreliable proxy"},
+        {"wrong": "Escalate when Claude's confidence < 0.7", "right": "Explicit criteria + examples", "why": "Self-reported confidence is poorly calibrated"},
+        {"wrong": "Pick the most recent account when names match", "right": "Ask for another identifier", "why": "Heuristic choice risks the wrong customer"},
+        {"wrong": "Return [] when a source fails", "right": "Return structured error with partial results", "why": "Silent failure hides gaps"},
+        {"wrong": "Abort the research when one source fails", "right": "Continue and annotate coverage gaps", "why": "Partial results still have value"},
+        {"wrong": "Trust 97% overall accuracy", "right": "Measure per type/field; stratified sampling", "why": "Aggregate hides weak segments"},
+        {"wrong": "Choose the more credible statistic", "right": "Annotate the conflict with both sources", "why": "Keep the uncertainty visible"}
+      ]
+    }
+  ]
+}

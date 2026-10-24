@@ -1,0 +1,357 @@
+{
+  "domains": [
+    {
+      "id": 1,
+      "slug": "agentic-architecture-orchestration",
+      "title": "Agentic Architecture & Orchestration",
+      "weight": 27,
+      "approxQuestions": 16,
+      "summary": "How you build the agentic loop, how a coordinator controls subagents, how you enforce rules with code, and how you save and resume work. Largest domain.",
+      "taskStatements": [
+        {
+          "id": "1.1",
+          "title": "Agentic Loops",
+          "oneLine": "Loop on stop_reason. Stop on end_turn.",
+          "keywords": ["agentic loop", "stop_reason", "tool_use", "end_turn", "tool_result", "conversation history", "model-driven decision"],
+          "concept": [
+            "An agentic loop is a cycle: send a request, Claude answers, if Claude wants a tool your code runs it and sends the result back, repeat until Claude is done.",
+            "The only reliable signal to control the loop is stop_reason. 'tool_use' = run the tool and continue. 'end_turn' = Claude is finished, stop.",
+            "Claude decides which tool to call next (model-driven). Your code does not pre-script the order of tool calls."
+          ],
+          "steps": [
+            "Send the request with the messages array and the tools list.",
+            "Read the response and check stop_reason.",
+            "If 'tool_use': find each tool_use block and run each tool in your code.",
+            "Append the assistant message plus a user message with tool_result blocks (matching tool_use_id) to the conversation history.",
+            "Send the full history again and go back to step 2.",
+            "If 'end_turn': return the final text and exit the loop."
+          ],
+          "table": {
+            "title": "stop_reason values",
+            "columns": ["stop_reason", "Meaning", "What your loop does"],
+            "rows": [
+              ["tool_use", "Claude asks for one or more tools", "Run every tool_use block, send back a tool_result for each tool_use_id, continue"],
+              ["end_turn", "Claude finished naturally", "Return the final answer, terminate"],
+              ["max_tokens", "Output hit the token limit; answer is cut off", "Do not treat as complete. Raise max_tokens or ask Claude to continue"],
+              ["stop_sequence", "A custom stop sequence was produced", "Handle per your design (usually terminate)"],
+              ["pause_turn", "A long server-side tool turn was paused", "Send the response back as-is so Claude can continue"],
+              ["refusal", "Claude declined for safety reasons", "Terminate; route to fallback or human"]
+            ]
+          },
+          "examTip": "Correct loop control = check stop_reason. Wrong: parse Claude's text for 'I am done'; stop when the reply has text content; use an iteration cap as the PRIMARY stop. A cap is only a safety net.",
+          "diagram": "send request -> Claude responds -> check stop_reason -> (tool_use) run tools -> append tool_result -> loop again | (end_turn) return final answer"
+        },
+        {
+          "id": "1.2",
+          "title": "Multi-Agent Orchestration",
+          "oneLine": "Hub-and-spoke. The coordinator routes everything.",
+          "keywords": ["coordinator", "subagent", "hub-and-spoke", "isolated context", "task decomposition", "iterative refinement", "synthesis"],
+          "concept": [
+            "One coordinator agent is the hub; specialized subagents (search, analysis, synthesis, report) are the spokes.",
+            "Subagents have isolated context: they do NOT inherit the coordinator's conversation history.",
+            "ALL communication goes through the coordinator. Subagents never talk to each other.",
+            "The coordinator decomposes the task, selects subagents dynamically, collects results, synthesizes, and handles errors."
+          ],
+          "steps": [
+            "Read the request. Identify ALL sub-topics it covers.",
+            "Decompose into subtasks. Check the scope is complete (not too narrow).",
+            "Delegate each subtask to the right subagent with full context in the prompt.",
+            "Collect structured results.",
+            "Evaluate the synthesis for gaps. If gaps exist, re-delegate with targeted queries (iterative refinement).",
+            "Produce the final output."
+          ],
+          "examTip": "Classic failure: the final report misses topics. Root cause = the coordinator's decomposition was too narrow (e.g. 'AI in creative industries' split into visual-art topics only). Fix the coordinator, not the search subagent."
+        },
+        {
+          "id": "1.3",
+          "title": "Subagent Invocation and Context Passing",
+          "oneLine": "Task tool. Pass context explicitly. Parallel = many Task calls in one response.",
+          "keywords": ["Task tool", "allowedTools", "AgentDefinition", "explicit context passing", "parallel subagents", "fork_session", "structured metadata"],
+          "concept": [
+            "The coordinator spawns a subagent with the Task tool. The coordinator's allowedTools MUST include 'Task' or it cannot spawn subagents.",
+            "Each subagent is defined by an AgentDefinition: a description (when to use it), a system prompt, and tool restrictions.",
+            "A subagent knows ONLY what you put in its prompt. Pass the previous findings, goal, constraints and output format explicitly."
+          ],
+          "steps": [
+            "Add 'Task' to the coordinator's allowedTools.",
+            "Write an AgentDefinition for each subagent type (description, system prompt, allowed tools).",
+            "In the Task prompt include the complete findings from earlier steps (e.g. search results for the synthesis agent).",
+            "Keep content separate from metadata (source URL, document name, page number) so sources are not lost.",
+            "State the goal and quality criteria, not rigid step-by-step procedures.",
+            "For parallel work, emit multiple Task tool calls in ONE response. Do not spawn them one per turn."
+          ],
+          "examTip": "'Subagents run one after another and it is slow' -> several Task calls in a single coordinator response. 'Synthesis agent lacks information' -> pass prior results in the prompt (subagents do not share memory)."
+        },
+        {
+          "id": "1.4",
+          "title": "Workflow Enforcement and Handoff",
+          "oneLine": "Programmatic gates for critical steps. Structured handoff to humans.",
+          "keywords": ["programmatic enforcement", "prerequisite gate", "deterministic compliance", "prompt-based guidance", "structured handoff", "multi-concern request"],
+          "concept": [
+            "Prompt-based guidance is probabilistic: works most of the time but has a non-zero failure rate. When a step MUST happen (e.g. verify identity before a refund) use programmatic enforcement.",
+            "A prerequisite gate is code that blocks a tool until a required earlier step has succeeded.",
+            "Multi-concern request (e.g. billing + shipping in one message): decompose into separate concerns, investigate each (in parallel, shared context), then give ONE unified answer."
+          ],
+          "steps": [
+            "Identify the critical order (get_customer -> lookup_order -> process_refund).",
+            "Store the result of the first step in state (e.g. verified_customer_id).",
+            "Before the downstream tool runs, check the state in code.",
+            "If the check fails, block the call and return a clear error to Claude.",
+            "If it passes, allow the call.",
+            "Handoff to a human: write a structured summary (human has NO transcript) with customer ID, root cause, amounts, what was tried, recommended action."
+          ],
+          "examTip": "Words like 'must always', 'compliance', 'financial', '12% of cases skip verification' -> programmatic enforcement (gate or hook), NOT a stronger prompt or more few-shot examples."
+        },
+        {
+          "id": "1.5",
+          "title": "Agent SDK Hooks",
+          "oneLine": "PreToolUse blocks. PostToolUse normalizes.",
+          "keywords": ["hook", "PreToolUse", "PostToolUse", "tool call interception", "normalization", "policy enforcement", "deterministic guarantee"],
+          "concept": [
+            "A hook is your code that runs at a fixed point in the agent loop. Hooks give deterministic guarantees; prompts only give probabilistic compliance."
+          ],
+          "table": {
+            "title": "Hook types",
+            "columns": ["Hook", "When it runs", "Typical use"],
+            "rows": [
+              ["PreToolUse", "Before a tool runs", "Block policy violations (refund > $500), redirect to human escalation, validate arguments"],
+              ["PostToolUse", "After a tool runs, before Claude sees the result", "Transform results: normalize dates (Unix -> ISO 8601), map status codes to words, trim fields"]
+            ]
+          },
+          "steps": [
+            "Enforce a refund limit: register a PreToolUse hook for process_refund.",
+            "In the hook read the amount argument.",
+            "If amount > 500: deny the call and return 'Escalate to a human agent.'",
+            "If amount <= 500: allow the call.",
+            "Normalize mixed formats: register a PostToolUse hook on the tools that return mixed formats, convert timestamps to ISO 8601, convert codes to readable values, remove unneeded fields, return the clean result."
+          ],
+          "examTip": "Different tools return dates in different formats and Claude makes errors -> PostToolUse normalization. Business rule must never be broken -> PreToolUse block."
+        },
+        {
+          "id": "1.6",
+          "title": "Task Decomposition Strategies",
+          "oneLine": "Prompt chaining for fixed steps. Dynamic decomposition for open tasks.",
+          "keywords": ["prompt chaining", "dynamic adaptive decomposition", "attention dilution", "per-file pass", "cross-file integration pass"],
+          "concept": [
+            "Prompt chaining = fixed sequential pipeline; use when steps are known and predictable (code review: each file, then one integration pass).",
+            "Dynamic adaptive decomposition = plan changes with findings; use for open-ended tasks ('add tests to legacy codebase': map structure, find high-impact areas, adapt).",
+            "Attention dilution: when one pass reviews many files at once, quality drops - some files get deep feedback, others shallow, bugs are missed, findings contradict."
+          ],
+          "steps": [
+            "Review a 14-file PR: split the PR into files.",
+            "Run a per-file local analysis pass on each file (local bugs, logic).",
+            "Run a separate cross-file integration pass (data flow, interfaces).",
+            "Merge and de-duplicate findings."
+          ],
+          "examTip": "'Inconsistent review depth across many files' -> per-file passes + integration pass. A bigger context window or bigger model is NOT the fix."
+        },
+        {
+          "id": "1.7",
+          "title": "Session State and Resumption",
+          "oneLine": "--resume, fork_session, or new session + summary.",
+          "keywords": ["--resume <session-name>", "named session", "fork_session", "stale tool results", "structured summary", "targeted re-analysis"],
+          "concept": [
+            "Choose how to continue prior work based on whether old tool results are still valid."
+          ],
+          "table": {
+            "title": "Resume vs fork vs new",
+            "columns": ["Option", "What it does", "Use when"],
+            "rows": [
+              ["--resume <session-name>", "Continues a named session with full history", "Prior context still valid. Tell Claude which files changed."],
+              ["fork_session", "Creates a branch from a shared baseline", "Compare two approaches from the same starting point"],
+              ["New session + structured summary", "Starts clean; you inject a summary of key findings", "Old tool results are stale (code changed a lot) or context is degraded"]
+            ]
+          },
+          "steps": [
+            "Check if the earlier tool results are still true.",
+            "Only a few files changed: --resume and tell Claude exactly which files changed (targeted re-analysis).",
+            "Much changed: start a NEW session and inject a structured summary of the valid findings.",
+            "To test two designs: use fork_session from the shared baseline."
+          ],
+          "examTip": "Resuming with stale tool results causes wrong answers. A fresh session + summary is more reliable than resuming a session full of outdated data."
+        }
+      ],
+      "testObjectives": [
+        {"id": "TO-1.1", "text": "Explain how the agentic loop uses model responses and stop_reason signals to decide whether to continue tool execution or terminate and return a final response.", "keyPoints": ["Your code, not Claude's words, controls the loop", "Append the WHOLE assistant message (text + tool_use) to history", "tool_use -> run tools -> one user message with all tool_results -> call again", "Any other stop_reason: handle explicitly; never assume success", "Distractors: stop when text appears / after N loops / when Claude says done"]},
+        {"id": "TO-1.2", "text": "Decompose complex tasks into dynamically generated subtasks that adapt as new information is discovered, rather than executing a fixed sequence regardless of intermediate findings.", "keyPoints": ["Discovery step first (map structure, list sources)", "Generate subtasks from findings", "Re-plan after each result: add, drop, reorder", "Stop when goal criteria are met, not when a fixed list ends", "'open-ended', 'unknown codebase' -> dynamic; 'predictable', 'same steps every time' -> chaining"]},
+        {"id": "TO-1.3", "text": "Design orchestration-layer safeguards ensuring every agent session ends with a completed resolution or human escalation, regardless of how the agentic loop terminates.", "keyPoints": ["Loop can end via end_turn, max_tokens, refusal, iteration cap, timeout, exception", "Wrap loop in an orchestrator with try/finally", "Define success in code (resolution_status == 'resolved')", "If not resolved on exit -> automatic escalation with structured handoff package", "Log the exit reason; no session ends silently"]},
+        {"id": "TO-1.4", "text": "Design structured handoff packages that preserve accumulated context, findings, and authorization state when transferring control between agent steps or to a human operator.", "keyPoints": ["Receiver has no transcript", "Fields: case/customer ID, authorization state, findings, actions taken, root cause/blocker, recommended action", "Authorization state = what is already verified/approved so the receiver does not repeat checks or exceed limits"]},
+        {"id": "TO-1.5", "text": "Apply session resumption techniques - including targeted re-analysis of changed files and context injection - to restore agent state accurately without repeating prior work.", "keyPoints": ["Get changed files (git diff --name-only)", "Resume named session or start new if stale", "Inject: 'Files A, B changed. Re-analyze only these. Prior findings: ...'"]},
+        {"id": "TO-1.6", "text": "Apply PreToolUse and PostToolUse hook patterns to enforce business rules and policy constraints not delegated to model discretion.", "keyPoints": ["PreToolUse checks the call and can deny it", "PostToolUse changes the result after the tool runs", "Rules that must not depend on Claude's judgment go in hooks"]}
+      ],
+      "traps": [
+        {"wrong": "Stop the loop when Claude's reply contains text", "right": "Stop when stop_reason == 'end_turn'", "why": "Claude can return text and a tool call in the same reply"},
+        {"wrong": "Use max_iterations = 5 as the main stop condition", "right": "Use stop_reason; keep a cap only as a safety net", "why": "A cap cuts off valid work"},
+        {"wrong": "Add 'ALWAYS verify identity first' in CAPS to the prompt", "right": "Prerequisite gate or PreToolUse hook", "why": "Prompts have a non-zero failure rate"},
+        {"wrong": "Subagents share the coordinator's memory", "right": "Pass context explicitly in the Task prompt", "why": "Subagent context is isolated"},
+        {"wrong": "Let subagents call each other directly", "right": "Route all messages through the coordinator", "why": "Hub-and-spoke gives control and observability"},
+        {"wrong": "Fix missing report topics in the search agent", "right": "Fix the coordinator's decomposition", "why": "The coordinator set the scope too narrow"},
+        {"wrong": "Review 14 files in one big pass", "right": "Per-file passes + integration pass", "why": "Avoids attention dilution"},
+        {"wrong": "Always --resume the old session", "right": "New session + summary when results are stale", "why": "Stale data causes wrong answers"},
+        {"wrong": "Human agent reads the transcript", "right": "Send a structured handoff summary", "why": "Humans often have no transcript access"}
+      ]
+    },
+    {
+      "id": 2,
+      "slug": "tool-design-mcp-integration",
+      "title": "Tool Design & MCP Integration",
+      "weight": 18,
+      "approxQuestions": 11,
+      "summary": "How you describe tools so Claude picks the right one, return errors so agents can recover, distribute tools across agents, configure MCP servers, and use Claude Code's built-in tools.",
+      "taskStatements": [
+        {
+          "id": "2.1",
+          "title": "Tool Interface Design",
+          "oneLine": "The tool description is the main selection signal.",
+          "keywords": ["tool description", "tool selection", "misrouting", "input format", "edge cases", "boundaries", "split generic tools", "rename tools"],
+          "concept": [
+            "Claude chooses a tool mainly from its description. Short or vague descriptions cause misrouting. Overlapping descriptions (analyze_content vs analyze_document) confuse Claude.",
+            "A good description has: what the tool does and returns; input format (e.g. 'order ID, format ORD-12345'); example queries; edge cases and boundaries (when NOT to use it and which tool to use instead).",
+            "Also check the system prompt: keyword-based instructions ('for any order question, check the order') can create unintended tool associations."
+          ],
+          "steps": [
+            "Read the descriptions of the confused tools side by side.",
+            "Expand each: purpose, inputs, outputs, examples, and 'use X instead when...'.",
+            "If tools still overlap, RENAME them or SPLIT a generic tool into purpose-specific tools (analyze_document -> extract_data_points, summarize_content, verify_claim_against_source).",
+            "Remove system-prompt keywords that push Claude to the wrong tool.",
+            "Test again with the failing queries."
+          ],
+          "examTip": "The FIRST fix for wrong tool selection is better tool descriptions (low effort, high impact). Few-shot examples, a routing classifier, or merging tools are heavier options that come later."
+        },
+        {
+          "id": "2.2",
+          "title": "Structured Error Responses",
+          "oneLine": "isError + errorCategory + isRetryable + message.",
+          "keywords": ["isError", "errorCategory", "isRetryable", "transient", "validation", "business", "permission", "access failure vs empty result"],
+          "concept": [
+            "In MCP a failed tool result sets the isError flag. A generic 'Operation failed' gives Claude no way to recover - return structured error data.",
+            "Access failure vs valid empty result: 'database timed out' is an ERROR. 'No orders found for this customer' is a SUCCESSFUL result with zero items. Never mix them up."
+          ],
+          "table": {
+            "title": "Error categories",
+            "columns": ["errorCategory", "Example", "isRetryable", "Correct action"],
+            "rows": [
+              ["transient", "Timeout, service unavailable", "true", "Retry with backoff, locally in the subagent"],
+              ["validation", "Bad input format, missing field", "false (until fixed)", "Correct the input, then call again"],
+              ["business", "Refund exceeds policy limit", "false", "Do not retry. Explain to customer in friendly words. Escalate if needed"],
+              ["permission", "Access denied", "false", "Do not retry. Escalate or ask for access"]
+            ]
+          },
+          "steps": [
+            "Set isError: true.",
+            "Add errorCategory (transient / validation / business / permission).",
+            "Add isRetryable (true / false).",
+            "Add a clear human-readable description (for business errors, a customer-friendly explanation).",
+            "In the subagent: retry transient errors locally.",
+            "If still unresolved: return to coordinator with the category, what was attempted, and any partial results."
+          ],
+          "examTip": "Agent keeps retrying a policy violation -> the error lacks isRetryable:false and a business category. Agent tells user 'no orders' when DB was down -> tool did not separate access failure from empty result."
+        },
+        {
+          "id": "2.3",
+          "title": "Tool Distribution and Tool Choice",
+          "oneLine": "4-5 tools per agent. tool_choice: auto / any / forced.",
+          "keywords": ["tool overload", "least privilege", "scoped cross-role tool", "tool_choice", "auto", "any", "forced tool", "constrained tool"],
+          "concept": [
+            "Too many tools reduce selection accuracy: an agent with 18 tools makes more wrong choices than one with 4-5 focused tools. Tools outside an agent's role get misused.",
+            "Give each agent ONLY the tools for its role (least privilege). Allow a scoped cross-role tool when high-frequency and simple (limited verify_fact for the synthesis agent). Replace generic tools with constrained ones (fetch_url -> load_document)."
+          ],
+          "table": {
+            "title": "tool_choice options",
+            "columns": ["Value", "Behavior", "Use when"],
+            "rows": [
+              ["{\"type\":\"auto\"}", "Claude may call a tool or reply with text", "Default. Conversational agents"],
+              ["{\"type\":\"any\"}", "Claude MUST call a tool but chooses which", "Structured output with several possible schemas (document type unknown)"],
+              ["{\"type\":\"tool\",\"name\":\"X\"}", "Claude MUST call tool X", "A specific step must run first (extract_metadata before enrichment)"],
+              ["{\"type\":\"none\"}", "Claude cannot call tools", "Pure text answer needed"]
+            ]
+          },
+          "steps": [
+            "Guarantee structured output from unknown documents: define one extraction tool per document type.",
+            "Set tool_choice: any so Claude must call one of them.",
+            "Claude picks the matching schema; you always get a tool_use block, never plain text."
+          ],
+          "examTip": "'Claude sometimes returns text instead of calling the tool' -> change auto to any (or force the tool). 'Must run tool X first' -> forced {type:tool,name:X}."
+        },
+        {
+          "id": "2.4",
+          "title": "MCP Server Integration",
+          "oneLine": ".mcp.json (team) vs ~/.claude.json (personal). Resources for catalogs.",
+          "keywords": ["MCP", "MCP server", ".mcp.json", "~/.claude.json", "${ENV_VAR} expansion", "MCP tools", "MCP resources", "MCP prompts", "community server"],
+          "concept": [
+            "MCP connects Claude to external systems. Use resources to give Claude a catalog up front, reducing exploratory tool calls.",
+            "Tools from all configured servers are discovered at connection time and are available at the same time.",
+            "Build vs reuse: standard integration (Jira, GitHub, Slack) -> existing community MCP server. Team-specific workflow -> custom MCP server. Claude prefers built-in Grep over your MCP search tool -> improve the MCP tool description."
+          ],
+          "table": {
+            "title": "MCP primitives",
+            "columns": ["Primitive", "What it is", "Controlled by", "Example"],
+            "rows": [
+              ["Tools", "Actions Claude can call", "Model", "create_issue, run_query"],
+              ["Resources", "Read-only data / content catalogs", "Application", "Issue summaries, doc hierarchy, DB schema"],
+              ["Prompts", "Reusable prompt templates", "User", "'Summarize this PR' template"]
+            ]
+          },
+          "steps": [
+            "Create .mcp.json in the project root.",
+            "Add the server entry (command, args).",
+            "Put secrets as env variables: \"GITHUB_TOKEN\": \"${GITHUB_TOKEN}\". Never commit the real token.",
+            "Commit .mcp.json. Each developer sets the variable locally.",
+            "Personal/experimental servers: local scope (default, this project) or user scope (all projects). Both stored in ~/.claude.json, not shared.",
+            "Verify with /mcp or claude mcp list."
+          ],
+          "examTip": "'New team member does not get the MCP server' -> it is in ~/.claude.json (user level); move to project .mcp.json. 'Token in the repo' -> ${ENV_VAR} expansion."
+        },
+        {
+          "id": "2.5",
+          "title": "Built-in Tools",
+          "oneLine": "Grep = content. Glob = file names. Edit = unique match. Read + Write = fallback.",
+          "keywords": ["Read", "Write", "Edit", "Bash", "Grep", "Glob", "unique text match", "Read + Write fallback", "incremental exploration"],
+          "concept": [
+            "Each built-in tool has one job. Do not confuse Grep (contents) with Glob (paths)."
+          ],
+          "table": {
+            "title": "Built-in tools",
+            "columns": ["Tool", "Purpose", "Example"],
+            "rows": [
+              ["Grep", "Search file contents (regex)", "Find callers, error messages, imports"],
+              ["Glob", "Find files by name/path pattern", "**/*.test.tsx, src/**/config.*"],
+              ["Read", "Read the full content of a file", "Open a file found by Grep"],
+              ["Write", "Create or fully overwrite a file", "New file, or full rewrite"],
+              ["Edit", "Targeted change by matching a UNIQUE text string", "Change one function"],
+              ["Bash", "Run shell commands", "Run tests, git, build"]
+            ]
+          },
+          "steps": [
+            "Understand an unfamiliar codebase: Glob to see structure.",
+            "Grep to find entry points (main(, route definitions).",
+            "Read those files; follow imports.",
+            "Trace a function through wrappers: find the exported name, then Grep for it across the codebase.",
+            "Build understanding incrementally. Do NOT read every file up front.",
+            "When Edit fails (text not unique): add surrounding lines to make it unique, or fallback: Read the whole file, change it, Write the whole file."
+          ],
+          "examTip": "Content search = Grep. File-name pattern = Glob. Edit needs a unique anchor."
+        }
+      ],
+      "testObjectives": [
+        {"id": "TO-2.1", "text": "Configure MCP servers and project settings at the correct scope - project-level for shared team tooling and user-level for personal or experimental configurations.", "keyPoints": ["Local (default): ~/.claude.json under this project, not shared", "Project: .mcp.json in repo, shared via git", "User: ~/.claude.json, all your projects, not shared", "Precedence if same name: local > project > user (fields not merged)", "Settings files: managed > .claude/settings.local.json (you, this project) > .claude/settings.json (team, git) > ~/.claude/settings.json (you, all projects)", "Audience words: 'team', 'new hires' -> project; 'experimental', 'personal' -> local/user"]},
+        {"id": "TO-2.2", "text": "Configure the tool_choice parameter to guarantee tool invocation when structured output is required, and sequence multi-tool workflows so prerequisite data is obtained before dependent tools are called.", "keyPoints": ["Turn 1: force the prerequisite tool (tool_choice type tool + name)", "Turn 2+: set back to auto (or any)", "Add a code gate: reject the dependent call without valid prerequisite data", "Forcing a tool on every turn can create an endless loop", "With extended thinking only auto and none are supported", "Distractor: 'add always call extract first to the prompt'"]},
+        {"id": "TO-2.3", "text": "Improve tool selection reliability by expanding tool descriptions with use-case examples, input format specifications, and explicit disambiguation guidance for semantically similar tools.", "keyPoints": ["Three parts: use-case examples, input format, disambiguation", "Weak: 'search_orders: Searches orders.' Strong: purpose + returns + examples + inputs + 'use X instead when...'", "Still the first and best fix vs routing classifier / fine-tuning / merging tools"]},
+        {"id": "TO-2.4", "text": "Integrate MCP servers into Claude Code and agent applications by selecting the correct server scope, configuring authentication via environment variable expansion, and verifying tool discovery.", "keyPoints": ["claude mcp add --transport http github --scope project <url>", "\"Authorization\": \"Bearer ${GITHUB_TOKEN}\"; defaults allowed: ${API_URL:-https://api.example.com}", "Verify with /mcp (Connected / Needs authentication / Failed) or claude mcp list", "Unset variable shows a warning in /mcp"]},
+        {"id": "TO-2.5", "text": "Implement MCP tool error handling that surfaces structured, type-specific error information to the agent - including recoverability status and suggested next actions - rather than generic failure messages.", "keyPoints": ["Example: {isError:true, errorCategory:'validation', isRetryable:true, message:'date must be YYYY-MM-DD', suggestedAction:'Reformat date and retry'}"]},
+        {"id": "TO-2.6", "text": "Apply systematic codebase exploration strategies using Grep, Glob, and Read tools that build incremental understanding while managing context window constraints.", "keyPoints": ["Order: Glob (map) -> Grep (locate) -> Read (targeted, offset/limit)", "Use file-list output from Grep first", "Record findings in a scratchpad", "Delegate very wide searches to an Explore subagent, keep only its summary", "Distractors: read every file first; Grep for *.test.ts (that is Glob); Glob for a function name (that is Grep)"]}
+      ],
+      "traps": [
+        {"wrong": "Add a routing classifier to fix tool confusion", "right": "Improve tool descriptions first", "why": "Descriptions are the main selection signal; lowest effort"},
+        {"wrong": "Return 'Operation failed'", "right": "Return errorCategory, isRetryable, and a message", "why": "The agent needs data to recover"},
+        {"wrong": "Return an empty list when the service times out", "right": "Return an error (transient)", "why": "Empty result is not an access failure"},
+        {"wrong": "Give every agent all 18 tools for flexibility", "right": "4-5 role-specific tools per agent", "why": "More tools = more wrong choices"},
+        {"wrong": "Keep tool_choice auto and add 'always use the tool' to the prompt", "right": "Use any or a forced tool", "why": "Guaranteed tool call"},
+        {"wrong": "Put the team MCP server in ~/.claude.json", "right": "Put it in project .mcp.json", "why": "User-level config is not shared"},
+        {"wrong": "Hard-code the API token in .mcp.json", "right": "Use ${ENV_VAR} expansion", "why": "Secrets must not enter version control"},
+        {"wrong": "Use Glob to find where a function is called", "right": "Use Grep", "why": "Glob matches paths, not contents"},
+        {"wrong": "Build a custom MCP server for Jira", "right": "Use the existing community server", "why": "Build custom only for team-specific workflows"}
+      ]
+    }
+  ]
+}

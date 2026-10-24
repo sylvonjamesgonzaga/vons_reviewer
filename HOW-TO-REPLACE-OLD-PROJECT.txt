@@ -1,0 +1,25 @@
+ReviewLab — Easiest way to replace your OLD project
+===================================================
+
+You do NOT need to identify individual replacement files.
+
+1. In the old CMD window, press Ctrl+C to stop Next.js.
+2. Open your vonviewer project directory in File Explorer.
+3. Rename the OLD reviewlab-starter folder to reviewlab-starter-backup.
+4. Extract this ZIP in the same parent directory. You should now have a NEW folder named reviewlab-starter.
+5. Open CMD in the NEW reviewlab-starter folder.
+6. Run: npm install
+7. Run: npm run validate
+8. Run: npm run dev
+9. Open http://localhost:3000 in Chrome (or the local URL printed by Next.js).
+
+If it works, keep or delete the old backup as you prefer.
+
+EDIT QUESTIONS:
+- data/mini-quiz.json for quick practice
+- data/mock-exam.json for the independent mock exam
+
+EDIT LESSONS:
+- data/domains-1-2.json and data/domains-3-5.json
+
+Source data from Claude is kept as supplied.
